@@ -1,5 +1,5 @@
 local rotationName = "CuteOne"
- 
+
 ---------------
 --- Toggles ---
 ---------------
@@ -39,8 +39,9 @@ local function createToggles()
     CreateButton("Mover",5,0)
 -- Execute Button
     ExecModes = {
-        [1] = { mode = "On", value = 1 , overlay = "Execute Enabled", tip = "Will use Execute.", highlight = 1, icon = br.player.spell.execute },
-        [2] = { mode = "Off", value = 2 , overlay = "Execute Disabled", tip = "Will NOT use Execute.", highlight = 0, icon = br.player.spell.execute }
+        [1] = { mode = "Auto", value = 1 , overlay = "Auto Execute Enabled", tip = "Will Auto use Execute Rotation.", highlight = 1, icon = br.player.spell.execute },
+        [2] = { mode = "On", value = 2 , overlay = "Force Execute Enabled", tip = "Will Only use Execute Rotation.", highlight = 0, icon = br.player.spell.execute },
+        [3] = { mode = "Off", value = 3 , overlay = "No Execute Enabled", tip = "Will NOT use Execute Rotation.", highlight = 0, icon = br.player.spell.furiousSlash }
     };
     CreateButton("Exec",6,0)
         -- refresh Button
@@ -50,13 +51,13 @@ local function createToggles()
     };
     CreateButton("Refresh",7,0)
 end
- 
+
 ---------------
 --- OPTIONS ---
 ---------------
 local function createOptions()
     local optionTable
- 
+
     local function rotationOptions()
         -----------------------
         --- GENERAL OPTIONS ---
@@ -168,14 +169,14 @@ local function createOptions()
     }}
     return optionTable
 end
- 
+
 ----------------
 --- ROTATION ---
 ----------------
 local function runRotation()
     if br.timer:useTimer("debugFury", 0.1) then
         --Print("Running: "..rotationName)
- 
+
 ---------------
 --- Toggles ---
 ---------------
@@ -186,11 +187,11 @@ local function runRotation()
         UpdateToggle("Mover",0.25)
         br.player.mode.mover = br.data.settings[br.selectedSpec].toggles["Mover"]
         UpdateToggle("Exec",0.25)
-        br.player.mode.exec = br.data.settings[br.selectedSpec].toggles["Exec"]
+        br.player.mode.exec = br.data.settings[br.selectedSpec].toggles["Exec"] 
         UpdateToggle("Refresh",0.25)
         br.player.mode.refresh = br.data.settings[br.selectedSpec].toggles["Refresh"]
- 
- 
+
+
 --------------
 --- Locals ---
 --------------
@@ -232,22 +233,24 @@ local function runRotation()
         local talent                                        = br.player.talent
         local thp                                           = getHP(br.player.units(5))
         local tier19_2pc                                    = TierScan("T19") >= 2
+        local tier19_4pc                                    = TierScan("T19") >= 4   
         local ttd                                           = getTTD
         local ttm                                           = br.player.power.ttm
         local units                                         = units or {}
- 
+
         units.dyn5 = br.player.units(5)
         units.dyn8 = br.player.units(8)
         enemies.yards8 = br.player.enemies(8)
         enemies.yards15 = br.player.enemies(15)
         enemies.yards30 = br.player.enemies(30)        
         enemies.yards40 = br.player.enemies(40)
- 
+        if hasEquiped(140806) then convergingFate = 1 else convergingFate = 0 end
+        if canUse(140808) and cd.bloodthirst == 0 and thp < 20 and (mode.exec == 1 or mode.exec == 2) then delaybc = true else delaybc = false end
+
+
         if leftCombat == nil then leftCombat = GetTime() end
         if profileStop == nil then profileStop = false end
- 
-        -- ChatOverlay(round2(getDistance2("target"),2)..", "..round2(getDistance3("target"),2)..", "..round2(getDistance4("target"),2)..", "..round2(getDistance("target"),2))
- 
+
         --custom funcs
         function refresh()
             for i = 1, #enemies.yards30 do
@@ -257,7 +260,7 @@ local function runRotation()
                 end
             end
         end
- 
+
 --------------------
 --- Action Lists ---
 --------------------
@@ -390,7 +393,7 @@ local function runRotation()
         -- Battle Cry
                 if isChecked("Battle Cry") then
                     -- battle_cry,if=gcd.remains=0&talent.reckless_abandon.enabled
-                    if cd.global == 0 and (talent.recklessAbandon or (level < 100 and (not talent.frothingBerserker or (talent.frothingBerserker and buff.frothingBerserker.exists())))) then
+                    if cd.global == 0 and (talent.recklessAbandon or (level < 100 and (not talent.frothingBerserker or (talent.frothingBerserker and buff.frothingBerserker.exists())))) and not delaybc then
                         if cast.battleCry() then return end
                     end
                     -- battle_cry,if=gcd.remains=0&talent.bladestorm.enabled&(raid_event.adds.in>90|!raid_event.adds.exists|spell_targets.bladestorm_mh>desired_targets)
@@ -489,36 +492,65 @@ local function runRotation()
                 end
             end
         end
+    -- Action List - Battle Cry Window 4pc DoS
+        function actionList_BattleCryWindow4pcdos()
+        -- Rampage
+            if power >= 100 then
+                if cast.rampage() then  end
+            end
+        -- Draught of Souls           
+            useItem(140808)
+        end
     -- Action List - Battle Cry Window
-        function actionList_BattleCryWindow() 
+        function actionList_BattleCryWindow()
+        -- Raging Blow
             --rb if enrage
             if talent.innerRage and buff.enrage.exists() then
                 if cast.ragingBlow() then return end
-            end 
+            end
         -- Rampage
             -- rampage,if=talent.reckless_abandon.enabled&!talent.frothing_berserker.enabled|(talent.frothing_berserker.enabled&rage>=100)
             if power >= 100 and (#enemies.yards8 == 1 or (#enemies.yards8 >= 2 and buff.meatCleaver.exists())) then
                 if cast.rampage() then return end
-            end        
+            end
+        -- Whirlwind        
             if power >= 100 and #enemies.yards8 >= 2 and not buff.meatCleaver.exists() then
                 if cast.whirlwind("player") then return end
-            end 
+            end
         -- Odyn's Fury
-            if getOptionValue("Artifact") == 1 or (getOptionValue("Artifact") == 2 and useCDs()) and getDistance(units.dyn5) < 5 then
+            if (getOptionValue("Artifact") == 1 or (getOptionValue("Artifact") == 2 and useCDs()) and getDistance(units.dyn5) < 10) and buff.enrage.remain() >= gcd then
                 if cast.odynsFury("player") then return end
-            end 
+            end
+        -- Bloodthirst
             if cast.bloodthirst() then return end
-            if cast.furiousSlash() then return end 
+        -- Furious Slash
+            if cast.furiousSlash() then return end
         end -- End Action List - Battle Cry Window
-       
+    -- Action List - Battle Cry Execute DoS
+        function actionList_BCExecutedos()
+        -- Draught of Souls
+           -- print("bc execute")
+            if buff.enrage.remain() >= 3 and buff.juggernaut.remain() >= 3.5 then
+                useItem(140808)
+            end
+        -- Execute
+            if buff.juggernaut.remain() <= gcd then
+                if cast.execute() then end
+            end
+        -- Bloodthirst
+            if cast.bloodthirst() then end
+        -- Execute    
+            if cast.execute() then end
+        end
+    -- Action List - Battle Cry Execute
         function actionList_BCExecute()
-           -- print("bc execute") 
+        -- Blood Thirst
             if not buff.enrage.exists() then
                 if cast.bloodthirst() then return end
-            end 
+            end
+        -- Execute
             if cast.execute() then return end
         end
- 
     -- Action List - Single
         function actionList_Single()
         -- Bloodthirst
@@ -538,9 +570,9 @@ local function runRotation()
             end            
         -- Raging Blow
             -- raging_blow,if=talent.inner_rage.enabled&buff.enrage.up
-            if ((useCDs() and cd.battleCry > 0) or not useCDs()) and (talent.innerRage or buff.enrage.exists()) then
+            if ((useCDs() and cd.battleCry > 0) or delaybc or not useCDs() or cd.battleCry == 0) and (talent.innerRage or buff.enrage.exists()) then
                 if cast.ragingBlow() then return end
-            end 
+            end
         -- Execute
             -- execute,if=buff.stone_heart.react&((talent.inner_rage.enabled&cooldown.raging_blow.remains>1)|buff.enrage.up)
             if buff.stoneHeart.exists() and ((talent.innerRage and cd.ragingBlow > 1) or buff.enrage.exists()) then
@@ -548,23 +580,21 @@ local function runRotation()
             end
         -- Whirlwind
             -- whirlwind,if=buff.wrecking_ball.react&buff.enrage.up
-            if buff.wreckingBall.exists() and buff.enrage.exists() then
+            if buff.wreckingBall.exists() then --and buff.enrage.exists() then
                 if cast.whirlwind("player") then return end
             end
-     -- Bloodthirst
-            -- bloodthirst
-            if (useCDs() and cd.battleCry > 0) or not useCDs() or cd.battleCry == 0 then
+        -- Bloodthirst
+            if (useCDs() and cd.battleCry > 0) or delaybc or not useCDs() or cd.battleCry == 0 then
                 if cast.bloodthirst() then return end
-            end 
+            end
         -- Furious Slash
             -- furious_slash
-            if (useCDs() and cd.battleCry > 0) or not useCDs() or cd.battleCry == 0 then
+            if (useCDs() and cd.battleCry > 0) or delaybc or not useCDs() or cd.battleCry == 0 then
                 if cast.furiousSlash() then return end
             end
         end -- End Action List - Single
     -- Action List - Execute
-        function actionList_Execute() 
-          --  print("execute")
+        function actionList_Execute()
         -- Bloodthirst
             -- bloodthirst,if=buff.fujiedas_fury.up&buff.fujiedas_fury.remains<2
             if buff.fujiedasFury.exists() and buff.fujiedasFury.remain() < 2 then
@@ -587,23 +617,24 @@ local function runRotation()
             end 
         -- Bloodthirst
             -- bloodthirst
-            if cast.bloodthirst() then return end                 
+            if not useCDs() or (useCDs() and not delaybc) or cd.battleCry == 0 then
+                if cast.bloodthirst() then return end
+            end
+        -- Raging Blow
+            if power <= 35 and (buff.enrage.exists() or talent.innerRage) then
+                if cast.ragingBlow() then return end 
+            end
         -- Furious Slash
             -- furious_slash,if=set_bonus.tier19_2pc
             if tier19_2pc then
                 if cast.furiousSlash() then return end
-            end
-        -- Raging Blow
-            -- raging_blow
-            if buff.enrage.exists() or talent.innerRage then
-                if cast.ragingBlow() then return end
             end
         -- Furious Slash
             -- furious_slash
             if cast.furiousSlash() then return end
         end -- End Action List - Execute
         -- Action List - Multi Targets
-        function actionList_FourTargets() 
+        function actionList_FourTargets()
         -- Rampage
             -- rampage,if=(buff.enrage.down&!talent.frothing_berserker.enabled)|buff.massacre.react|rage>=100
             if ((not buff.enrage.exists() and not talent.frothingBerserker) or buff.massacre.exists() or power >= 100) and buff.meatCleaver.exists() then
@@ -611,22 +642,22 @@ local function runRotation()
             end            
         -- Bloodthirst
             -- bloodthirst
-            if ((useCDs() and cd.battleCry > 0) or not useCDs() or cd.battleCry == 0) and buff.meatCleaver.exists() then
+            if ((useCDs() and cd.battleCry > 0) or delaybc or not useCDs() or cd.battleCry == 0)  and buff.meatCleaver.exists() then
                 if cast.bloodthirst() then return end
-            end 
+            end
         -- Whirlwind
             -- whirlwind,if=buff.wrecking_ball.react&buff.enrage.up
-            if cast.whirlwind("player") then return end 
+            if cast.whirlwind("player") then return end
         end
-        function actionList_EightTargets() 
+        function actionList_EightTargets()
         -- Rampage
             -- rampage,if=(buff.enrage.down&!talent.frothing_berserker.enabled)|buff.massacre.react|rage>=100
             if (not buff.enrage.exists() and not talent.frothingBerserker) or buff.massacre.exists() or power >= 100 then
                 if cast.rampage() then return end
-            end 
+            end
         -- Whirlwind
             -- whirlwind,if=buff.wrecking_ball.react&buff.enrage.up
-            if cast.whirlwind("player") then return end 
+            if cast.whirlwind("player") then return end
         end
         function actionList_ThreeTargets()
 -- Bloodthirst
@@ -643,29 +674,29 @@ local function runRotation()
             -- rampage,if=(buff.enrage.down&!talent.frothing_berserker.enabled)|buff.massacre.react|rage>=100
             if (not buff.enrage.exists() and not talent.frothingBerserker) or buff.massacre.exists() or power >= 100 and buff.meatCleaver.exists() then
                 if cast.rampage() then return end
-            end        
+            end         
         -- Whirlwind
             -- whirlwind,if=buff.wrecking_ball.react&buff.enrage.up
             if not buff.meatCleaver.exists() then
                 if cast.whirlwind("player") then return end
-            end  
+            end   
         -- Raging Blow
             -- raging_blow,if=talent.inner_rage.enabled&buff.enrage.up
-            if ((useCDs() and cd.battleCry > 0) or not useCDs() or cd.battleCry == 0) and (talent.innerRage or buff.enrage.exists()) then
+            if ((useCDs() and cd.battleCry > 0) or delaybc or not useCDs() or cd.battleCry == 0) and (talent.innerRage or buff.enrage.exists()) then
                 if cast.ragingBlow() then return end
-            end 
+            end
         -- Execute
             -- execute,if=buff.stone_heart.react&((talent.inner_rage.enabled&cooldown.raging_blow.remains>1)|buff.enrage.up)
             if buff.stoneHeart.exists() and ((talent.innerRage and cd.ragingBlow > 1) or buff.enrage.exists()) then
                 if cast.execute() then return end
-            end 
+            end
         -- Bloodthirst
             -- bloodthirst
-            if ((useCDs() and cd.battleCry > 0) or not useCDs() or cd.battleCry == 0) and buff.meatCleaver.exists() then
+            if ((useCDs() and cd.battleCry > 0) or delaybc or not useCDs() or cd.battleCry == 0) and buff.meatCleaver.exists() then
                 if cast.bloodthirst() then return end
-            end 
+            end
             -- whirlwind,if=buff.wrecking_ball.react&buff.enrage.up
-            if cast.whirlwind("player") then return end   
+            if cast.whirlwind("player") then return end
         end -- End Action List - Three Targets
     -- Action List - MultiTarget
         function actionList_TwoTarget()
@@ -683,30 +714,30 @@ local function runRotation()
             -- rampage,if=(buff.enrage.down&!talent.frothing_berserker.enabled)|buff.massacre.react|rage>=100
             if (not buff.enrage.exists() and not talent.frothingBerserker) or buff.massacre.exists() or power >= 100 and buff.meatCleaver.exists() then
                 if cast.rampage() then return end
-            end        
+            end         
         -- Whirlwind
             -- whirlwind,if=buff.wrecking_ball.react&buff.enrage.up
             if not buff.meatCleaver.exists() and power >= 90 then
                 if cast.whirlwind("player") then return end
-            end  
+            end   
         -- Raging Blow
             -- raging_blow,if=talent.inner_rage.enabled&buff.enrage.up
-            if ((useCDs() and cd.battleCry > 0) or not useCDs() or cd.battleCry == 0) and (talent.innerRage or buff.enrage.exists()) then
+            if ((useCDs() and cd.battleCry > 0) or delaybc or not useCDs() or cd.battleCry == 0) and (talent.innerRage or buff.enrage.exists()) then
                 if cast.ragingBlow() then return end
-            end 
+            end
         -- Execute
             -- execute,if=buff.stone_heart.react&((talent.inner_rage.enabled&cooldown.raging_blow.remains>1)|buff.enrage.up)
             if buff.stoneHeart.exists() and ((talent.innerRage and cd.ragingBlow > 1) or buff.enrage.exists()) then
                 if cast.execute() then return end
-            end 
+            end
         -- Bloodthirst
             -- bloodthirst
             if (useCDs() and cd.battleCry > 0) or not useCDs() or cd.battleCry == 0 then
                 if cast.bloodthirst() then return end
-            end 
+            end
         -- Furious Slash
             -- furious_slash
-            if (useCDs() and cd.battleCry > 0) or not useCDs() or cd.battleCry == 0  then
+            if (useCDs() and cd.battleCry > 0) or delaybc or not useCDs() or cd.battleCry == 0 then
                 if cast.furiousSlash() then return end
             end
         end -- End Action List - MultiTarget
@@ -745,7 +776,6 @@ local function runRotation()
                         StartAttack(units.dyn5)
                     end
                 end
-             --   print(tostring(#enemies.yards8))
             -- Action List - Movement
                 -- run_action_list,name=movement,if=movement.getDistance(units.dyn5)>5
                 if getDistance(units.dyn8) > 8 then
@@ -756,44 +786,49 @@ local function runRotation()
             --refresh
                 --if mode.refresh == 1 and talent.warMachine and (not buff.warMachine.exists() or buff.warMachine.duration() < ttd(units.dyn8)) then
                   --  if refresh() then return end
-                --end                
+                --end                 
             -- Action List - Cooldowns
                 if actionList_Cooldowns() then return end
             -- Action List - Battle Cry Window
                 -- call_action_list,name=cooldowns,if=buff.battle_cry.up
-                if buff.battleCry.exists() and thp < 20 and mode.exec == 1 then
+                if buff.battleCry.exists() and thp < 20 and (mode.exec == 1 or mode.exec == 2) and canUse(140808) then
+                    if actionList_BCExecutedos() then return end
+                end
+                if buff.battleCry.exists() and thp < 20 and (mode.exec == 1 or mode.exec == 2) and not canUse(140808) then
                     if actionList_BCExecute() then return end
-                end      
- 
-                if buff.battleCry.exists() and mode.exec == 2 then
+                end
+                if buff.battleCry.exists() and (mode.exec == 3 or (thp >= 20 and (mode.exec == 1 or mode.exec == 2))) and canUse(140808) then
+                    if actionList_BattleCryWindow4pcdos() then return end
+                end
+                if buff.battleCry.exists() and (mode.exec == 3 or (thp >= 20 and (mode.exec == 1 or mode.exec == 2))) then
                     if actionList_BattleCryWindow() then return end
                 end
             -- Action List - 8+ Targets
-                if #enemies.yards8 >= 8 and mode.exec == 2 then
+                if #enemies.yards8 >= 8 and ((mode.exec == 1 and thp >= 20) or mode.exec == 3) then
                     if actionList_EightTargets() then return end
                 end
             -- Action List - 4 Targets
-                if #enemies.yards8 >= 4 and mode.exec == 2 then
+                if #enemies.yards8 >= 4 and ((mode.exec == 1 and thp >= 20) or mode.exec == 3) then
                     if actionList_FourTargets() then return end
                 end            
             -- Action List - 3 Targets
                 -- call_action_list,name=three_targets,if=target.health.pct>20&(spell_targets.whirlwind=3|spell_targets.whirlwind=4)
-                if #enemies.yards8 == 3 and mode.exec == 2 then
+                if #enemies.yards8 == 3 and ((mode.exec == 1 and thp >= 20) or mode.exec == 3) then
                     if actionList_ThreeTargets() then return end
                 end
             -- Action List - 2 Target
                 -- call_action_list,name=aoe,if=spell_targets.whirlwind>4
-                if #enemies.yards8 == 2 and mode.exec == 2 then
+                if #enemies.yards8 == 2 and ((mode.exec == 1 and thp >= 20) or mode.exec == 3) then
                     if actionList_TwoTarget() then return end
                 end
             -- Action List - Execute
                 -- call_action_list,name=execute,if=target.health.pct<20
-                if thp < 20 and level >= 8 and mode.exec == 1 then
+                if thp < 20 and level >= 8 and (mode.exec == 1 or mode.exec == 2) then
                     if actionList_Execute() then return end
                 end
             -- Action List - Single Target
                 -- call_action_list,name=single_target,if=target.health.pct>20
-                if thp >= 20 or (thp < 20 and level < 8) or (((#enemies.yards8 > 3 and mode.rotation == 1) or mode.rotation == 2) and level < 28) or mode.exec == 2 then
+                if not buff.battleCry.exists() and (thp >= 20 or (thp < 20 and level < 8) or (((#enemies.yards8 > 3 and mode.rotation == 1) or mode.rotation == 2) and level < 28) or ((mode.exec == 1 and thp >= 20) or mode.exec == 3)) then
                     if actionList_Single() then return end
                 end
             end -- End Combat Rotation
